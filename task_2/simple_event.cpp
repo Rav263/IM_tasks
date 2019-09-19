@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <sys/wait.h>
 #include <list>
 #include <iostream>
 
@@ -44,7 +46,7 @@ public:
 
 void Calendar::put(Event *ev) {
     list<Event*>::iterator i;
-    Event ** e = new (Event*);
+    Event **e = new (Event*);
     *e = ev;
     if (empty()){ 
         push_back(*e); 
@@ -74,8 +76,8 @@ float get_req_time(int source_num); // длительность задания
 float get_pause_time(int source_num); // длительность паузы между заданиями
 
 
-int main(int argc, char **argv) {
-    Calendar calendar;
+Calendar calendar;
+void server_func(int server_id) {
     Queue queue;
     Event *curr_ev;
     
@@ -93,7 +95,10 @@ int main(int argc, char **argv) {
     // цикл по событиям
 
     while ((curr_ev = calendar.get()) != NULL) {
-        cout << "time " << curr_ev->time << " type " << curr_ev->type << endl;
+        cout << "server: " << server_id 
+             << " time: "  << curr_ev->time 
+             << " typ:e "  << curr_ev->type << endl;
+
         curr_time = curr_ev->time; // продвигаем время
         
         // обработка события
@@ -108,26 +113,31 @@ int main(int argc, char **argv) {
             
             case EV_REQ: // планируем событие окончания обработки, если процессор свободен, иначе ставим в очередь
                 dt = get_req_time(curr_ev->attr); 
-	            cout << "dt " << dt << " num " << curr_ev->attr << endl;
+	            cout << "server: " << server_id 
+                     << " dt: "   << dt 
+                     << " num: "  << curr_ev->attr << endl;
                 
                 if (cpu_state == IDLE) { 
 	                cpu_state = RUN; 
-	                calendar.put(new Event(curr_time+dt, EV_FIN, curr_ev->attr)); 
+	              
+                    calendar.put(new Event(curr_time+dt, EV_FIN, curr_ev->attr)); 
 	                run_begin = curr_time;
+                
                 } else 
  	                queue.push_back(new Request(dt, curr_ev->attr));
                     // планируем событие генерации следующего задания
                 
-                calendar.put(new Event(curr_time+get_pause_time(curr_ev->attr), EV_REQ, curr_ev->attr)); 
+                calendar.put(new Event(curr_time + get_pause_time(curr_ev->attr), EV_REQ, curr_ev->attr)); 
 	            break;
             
             case EV_FIN: // объявляем процессор свободным и размещаем задание из очереди, если таковое есть
                 cpu_state=IDLE; 
 
                 // выводим запись о рабочем интервале
-                cout << "Работа с " << run_begin << " по " 
-                     << curr_time << " длит. " 
-                     << (curr_time-run_begin) << endl; 
+                cout << "server: "    << server_id 
+                     << " Работа с: " << run_begin 
+                     << " по: "       << curr_time 
+                     << " длит.: "    << (curr_time-run_begin) << endl; 
                 
                 if (!queue.empty()) {
                     Request *rq = queue.front(); 
@@ -141,6 +151,17 @@ int main(int argc, char **argv) {
         } // switch
         delete curr_ev;
     } // while
+}
+
+
+int main(int argc, char **argv) {
+    if (fork() == 0) {
+        server_func(0);
+    } else {
+        server_func(1);
+    }
+
+    wait(0);
 } // main
 
 int rc = 0; 
