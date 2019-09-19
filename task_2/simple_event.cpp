@@ -69,19 +69,52 @@ Event* Calendar::get() {
     return e;
 }
 
+Calendar calendar;
+
+class Supervisor {
+public:
+    float time_first;
+    float time_second;
+
+    Event *get_event(int server_id) {
+        
+        if (server_id == 0) {
+            while (time_first > time_second) {
+                sleep(2);        
+            }
+        } else {
+            while (time_second > time_first) {
+                sleep(2);
+            }
+        }
+        
+        return calendar.get();
+    }
+
+    float get_time(int server_id) {
+        if (server_id == 0) return time_first;
+        else return time_second;
+    }
+
+    void set_time(int server_id, float cur_time) {
+        if (server_id == 0) time_first = cur_time;
+        else time_second = cur_time;
+    }
+};
+
 
 typedef list<Request*> Queue; // очередь заданий к процессору 
 
 float get_req_time(int source_num); // длительность задания
 float get_pause_time(int source_num); // длительность паузы между заданиями
 
+Supervisor supervisor;
 
-Calendar calendar;
 void server_func(int server_id) {
     Queue queue;
     Event *curr_ev;
-    
-    float curr_time = 0;
+    supervisor.set_time(server_id, 0);
+
     float dt;
     int cpu_state = IDLE;
     float run_begin; // 
@@ -89,18 +122,19 @@ void server_func(int server_id) {
     
 
     // начальное событие и инициализация календаря
-    curr_ev = new Event(curr_time, EV_INIT, 0);
-    calendar.put( curr_ev );
+    curr_ev = new Event(0, EV_INIT, 0);
+    calendar.put(curr_ev);
     
     // цикл по событиям
 
-    while ((curr_ev = calendar.get()) != NULL) {
+    while ((curr_ev = supervisor.get_event(server_id)) != NULL) {
         cout << "server: " << server_id 
              << " time: "  << curr_ev->time 
              << " typ:e "  << curr_ev->type << endl;
 
-        curr_time = curr_ev->time; // продвигаем время
-        
+        supervisor.set_time(server_id, curr_ev->time); // продвигаем время
+        float curr_time = curr_ev->time;
+
         // обработка события
         if (curr_time >= LIMIT) 
             break; // типичное дополнительное условие останова моделирования
@@ -155,6 +189,8 @@ void server_func(int server_id) {
 
 
 int main(int argc, char **argv) {
+    calendar.put(new Event(0, EV_INIT, 0));
+    
     if (fork() == 0) {
         server_func(0);
     } else {
