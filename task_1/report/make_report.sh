@@ -1,5 +1,5 @@
 #! /bin/bash
 
-xelatex report_6.tex
+xelatex report.tex
 
-evince report_6.pdf
+evince report.pdf

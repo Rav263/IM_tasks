@@ -12,10 +12,12 @@
 
 \usetikzlibrary{positioning, arrows}
 
-\geometry{a4paper, left = 15mm, top = 10mm, bottom = 10mm, right = 15mm}
+\geometry{a4paper, left = 15mm, top = 10mm, bottom = 20mm, right = 15mm}
 
 \setmainfont{Times New Roman}
 \setmonofont{Courier New}
+\setcounter{secnumdepth}{0}
+
 
 \begin{document}
 
@@ -43,6 +45,24 @@
         \end{center}
     \end{titlepage}
 
+    \tableofcontents
+    \newpage
 
+    \section{Постановка задачи}
+        В данной работе необходимо было оптимизировать данную программу. Изначальная программа была реализованная на языке си, для её оптимизации возможно было использовать всё, при условии что сохраняется семантика программы.
+
+    \newpage
+    \section{Описание методов оптимизации}
+        Изначально было принято решение попробовать скомпилировать программу с максимальной оптимизацией компилятора {\ttfamily -03}, что дало прирост примерно в 4.5 раза. 
+        После было прочитанно несколько статей на тему оптимизации вычислений с матрицами. 
+        Практически в каждой предлогалось использовать векторные инструкции процессора. 
+        После просмотра ассемблерного кода, компилятора, выяснилось что после применения {\ttfamily -O3}, компилятор сам применил векторные инструкции (Это видно на данном куске {\ttfamily objdump -D}). \\
+
+    \item {\ttfamily 11a4:	48 83 c0 08          	add    0x8,\%rax}
+    \item {\ttfamily 11a8:	c4 a1 7b 10 04 06    	vmovsd (\%rsi,\%r8,1),\%xmm0}
+    \item {\ttfamily 11ae:	c5 fb 58 40 f8       	vaddsd -0x8(\%rax),\%xmm0,\%xmm0}
+    \item {\ttfamily 11b3:	c5 f3 58 c8          	vaddsd \%xmm0,\%xmm1,\%xmm1}
+    \item {\ttfamily 11b7:	c5 fb 11 09          	vmovsd \%xmm1,(\%rcx) }
+        Соответственно необходимоть использовать ихвручную отпала.
 
 \end{document}
