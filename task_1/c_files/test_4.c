@@ -6,7 +6,7 @@
 #include <sys/mman.h>
 
 #define SIZE 1024
-#define THREADS 8
+#define THREADS 4
 
 #define BLOCKS SIZE/THREADS
 //#define CHECK
