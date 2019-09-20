@@ -108,6 +108,9 @@ public:
 class Supervisor {
     Times times[2];
     Calendar *calendar;
+    int last_id = 0;
+
+    std::mutex id_mutex;
     std::mutex calendar_mutex;
 public:
     Supervisor(Calendar *calendar): calendar(calendar) {}
@@ -118,9 +121,27 @@ public:
 
     Event *get_event(int server_id) {
         // берём ближайшее для сервера событие или ближайшее событие без индификатора сервера
+        
+
+        while (true) {
+            id_mutex.lock();
+            if (last_id != server_id){
+                id_mutex.unlock();
+                break;
+            }
+            id_mutex.unlock();
+
+
+            std::this_thread::sleep_for(std::chrono::microseconds(10));
+        }
+
         calendar_mutex.lock();
         Event *current_event = calendar->get(server_id);
         calendar_mutex.unlock();
+
+        id_mutex.lock();
+        last_id = server_id;
+        id_mutex.unlock();
 
         if (current_event == nullptr) {
             return nullptr;
@@ -191,13 +212,14 @@ public:
     }
 
     void print_all() {
+        std::cout << std::endl << std::endl;
         std::cout << "SERVER " << server_id << " LOG" << std::endl;
 
         for (auto &now : out_put) {
             std::cout << now << std::endl;
         }
 
-        std::cout << std::endl << std::endl << std::endl << std::endl;
+        std::cout << std::endl << std::endl; 
     }
 
 
