@@ -4,6 +4,8 @@
 #include <thread>
 #include <chrono>
 #include <functional>
+#include <string>
+#include <mutex>
 
 
 #define EV_INIT 1
@@ -26,11 +28,11 @@ public:
     Event(float time, int type, int attr, int server_id): 
         time(time), type(type), attr(attr), server_id(server_id) {}
    
-    void print() {
-        std::cout << "time: "      << time      << " "
-                  << "type: "      << type      << " "
-                  << "server_id: " << server_id << " "
-                  << "attr: "      << attr      << std::endl;
+    void print(std::vector<std::string> &out_put) {
+        out_put.push_back("time: " + std::to_string(time) + " "
+                   + "type: "      + std::to_string(type) + " "
+                   + "attr: "      + std::to_string(attr) + " "
+                   + "server_id: " + std::to_string(server_id));
     }
     int get_attr() {
         return attr;
@@ -106,6 +108,7 @@ public:
 class Supervisor {
     Times times[2];
     Calendar *calendar;
+    std::mutex calendar_mutex;
 public:
     Supervisor(Calendar *calendar): calendar(calendar) {}
 
@@ -115,7 +118,9 @@ public:
 
     Event *get_event(int server_id) {
         // берём ближайшее для сервера событие или ближайшее событие без индификатора сервера
+        calendar_mutex.lock();
         Event *current_event = calendar->get(server_id);
+        calendar_mutex.unlock();
 
         if (current_event == nullptr) {
             return nullptr;
@@ -137,9 +142,10 @@ public:
             
             std::cout << times[server_id].get_current_time() << " " << event_time << std::endl;
         }
-
+        calendar_mutex.lock();
         calendar->put(new Event(times[server_id].get_current_time() + event_time,
                                 event_type, attr, id));
+        calendar_mutex.unlock();
     }
 };
 
@@ -151,7 +157,7 @@ class Server {
     int server_id;
     int request_num = 0;
     int pause_num = 0;
-
+    std::vector<std::string> out_put;
 
 public:
     Server(int server_id, Supervisor *supervisor, int cpu_state): 
@@ -161,8 +167,8 @@ public:
     float get_req_time(int server_id, int source_num) {
         float request = ((float) rand()) / RAND_MAX;
         
-        std::cout << "Server id: " << server_id << " "
-                  << "Request num: " << request_num << std::endl;
+        print("Server id: "   + std::to_string(server_id) + " "
+            + "Request num: " + std::to_string(request_num));
    
         request_num += 1;
 
@@ -172,13 +178,28 @@ public:
     float get_pause_time(int server_id, int source_num) {
         float pause = ((float) rand()) / RAND_MAX;
 
-        std::cout << "Server id: " << server_id << " "
-                  << "Pause num: " << pause_num << std::endl;
+        print("Server id: " + std::to_string(server_id) + " "
+            + "Pause num: " + std::to_string(pause_num));
 
         pause_num += 1;
 
         return source_num == 1 ? pause * 20 : pause * 10;
     }
+    
+    void print(std::string now_string) {
+        out_put.push_back(now_string);
+    }
+
+    void print_all() {
+        std::cout << "SERVER " << server_id << " LOG" << std::endl;
+
+        for (auto &now : out_put) {
+            std::cout << now << std::endl;
+        }
+
+        std::cout << std::endl << std::endl << std::endl << std::endl;
+    }
+
 
     void run_server() {
         Queue queue;
@@ -192,7 +213,7 @@ public:
                 continue;
             }
             
-            current_event->print();
+            current_event->print(out_put);
 
             if (current_event->get_type() == EV_INIT) {
                 supervisor->add_event(0, server_id, EV_REQ, 1);
@@ -201,9 +222,9 @@ public:
             } else if (current_event->get_type() == EV_REQ) {
                 float event_time = get_req_time(server_id, current_event->get_attr());
                 
-                std::cout << "server: " << server_id 
-                          << " dt: "   << event_time
-                          << " num: "  << current_event->get_attr() << std::endl;
+                print("server: " + std::to_string(server_id) 
+                              + " dt: "    + std::to_string(event_time)
+                              + " num: "   + std::to_string(current_event->get_attr()));
                 
 
                 if (cpu_state == IDLE) {
@@ -220,16 +241,16 @@ public:
                 cpu_state = IDLE;
                 Times *time = supervisor->get_time(server_id);
 
-                std::cout << "server: "    << server_id 
-                          << " Работа с: " << time->get_run_time()
-                          << " по: "       << time->get_current_time()
-                          << " длит.: "    << (time->get_current_time() - 
-                                               time->get_run_time()) << std::endl; 
+                print("server: "    + std::to_string(server_id)
+                    + " Работа с: " + std::to_string(time->get_run_time())
+                    + " по: "       + std::to_string(time->get_current_time())
+                    + " длит.: "    + std::to_string((time->get_current_time() - 
+                                                      time->get_run_time()))); 
              
 
                 if (!queue.empty()) {
                     cpu_state = RUN;
-                    std::cout << "GET EVENT FROM QUEUE:: server_id: " << server_id << std::endl;
+                    print("GET EVENT FROM QUEUE:: server_id: " + std::to_string(server_id));
 
                     Request *request = queue.front();
                     queue.pop_front();
@@ -294,6 +315,9 @@ int main() {
     server_2.join();
     server_1.join();
 
+
+    first_server->print_all();
+    second_server->print_all();
 
     delete calendar;
     delete supervisor;
