@@ -3,11 +3,13 @@
 #include <vector>
 #include <thread>
 #include <chrono>
+#include <functional>
 
 
 #define EV_INIT 1
 #define EV_REQ 2
 #define EV_FIN 3
+#define EV_END_TIME 4
 
 #define RUN 1
 #define IDLE 0
@@ -24,6 +26,12 @@ public:
     Event(float time, int type, int attr, int server_id): 
         time(time), type(type), attr(attr), server_id(server_id) {}
    
+    void print() {
+        std::cout << "time: "      << time      << " "
+                  << "type: "      << type      << " "
+                  << "server_id: " << server_id << " "
+                  << "attr: "      << attr      << std::endl;
+    }
     int get_attr() {
         return attr;
     }
@@ -103,9 +111,20 @@ public:
 
     Event *get_event(int server_id) {
         // берём ближайшее для сервера событие или ближайшее событие без индификатора сервера
+        std::cout << calendar->size() << std::endl;
+
         Event *current_event = calendar->get(server_id);
-        
+       
+
+
+        if (current_event == nullptr) {
+            return nullptr;
+        }
+
         times[server_id].set_current_time(current_event->get_time());
+        if (times[server_id].get_current_time() >= LIMIT) {
+            add_event(times[server_id].get_current_time(), server_id, EV_END_TIME, 0);
+        }
 
         return current_event;
     }
@@ -125,6 +144,8 @@ class Server {
     int cpu_state;
     int server_id;
     int request_num;
+    int pause_num;
+
 
 public:
     Server(int server_id, Supervisor *supervisor, int cpu_state): 
@@ -132,16 +153,25 @@ public:
 
 
     float get_req_time(int server_id, int source_num) {
-        float rnd = ((float) rand()) / RAND_MAX;
+        float request = ((float) rand()) / RAND_MAX;
         
         std::cout << "Server id: " << server_id << " "
                   << "Request num: " << request_num << std::endl;
-    
-        return source_num == 1 ? rnd * 10 : rnd * 20;
+   
+        request_num += 1;
+
+        return source_num == 1 ? request * 10 : request * 20;
     }
 
     float get_pause_time(int server_id, int source_num) {
-        return 1;
+        float pause = ((float) rand()) / RAND_MAX;
+
+        std::cout << "Server id: " << server_id << " "
+                  << "Pause num: " << pause_num << std::endl;
+
+        pause_num += 1;
+
+        return source_num == 1 ? pause * 20 : pause * 10;
     }
 
     void run_server() {
@@ -150,9 +180,13 @@ public:
         while (true) {
             Event *current_event = supervisor->get_event(server_id);
 
+
             if (current_event == nullptr) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
             }
+            
+            current_event->print();
 
             if (current_event->get_type() == EV_INIT) {
                 supervisor->add_event(0, server_id, EV_REQ, 1);
@@ -186,6 +220,9 @@ public:
                     
                     delete request;
                 }
+            } else if (current_event->get_type() == EV_END_TIME) {
+                delete current_event;
+                break;
             }
 
             delete current_event;
@@ -207,8 +244,9 @@ Event *Calendar::get(int server_id) {
 
     auto iter = begin();
 
-    for (;iter != end() && ((*iter)->get_server_id() == server_id ||
-                           ((*iter)->get_server_id() == -1)); ++iter);
+    for (;iter != end() && (*iter)->get_server_id() != server_id && (*iter)->get_server_id() != -1; ++iter) {
+        (*iter)->print();
+    }
     if (iter == end())
         return nullptr;
 
@@ -219,5 +257,23 @@ Event *Calendar::get(int server_id) {
 }
 
 int main() {
+    Calendar *calendar = new Calendar();
+    Supervisor *supervisor = new Supervisor(calendar);
+    srand(2019);
+
+    supervisor->add_event(0, 0, EV_INIT, 0);
+    Server *first_server = new Server(0, supervisor, IDLE);
+
+
+
+    std::thread server_1(std::bind(&Server::run_server, first_server));
+
+    server_1.join();
+
+
+    delete calendar;
+    delete supervisor;
+    delete first_server;
+
     return 0;
 }
