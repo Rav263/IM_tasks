@@ -57,12 +57,23 @@
         После было прочитанно несколько статей на тему оптимизации вычислений с матрицами. 
         Практически в каждой предлогалось использовать векторные инструкции процессора. 
         После просмотра ассемблерного кода, компилятора, выяснилось что после применения {\ttfamily -O3}, компилятор сам применил векторные инструкции (Это видно на данном куске {\ttfamily objdump -D}). \\
+    
 
-    \item {\ttfamily 11a4:	48 83 c0 08          	add    0x8,\%rax}
-    \item {\ttfamily 11a8:	c4 a1 7b 10 04 06    	vmovsd (\%rsi,\%r8,1),\%xmm0}
-    \item {\ttfamily 11ae:	c5 fb 58 40 f8       	vaddsd -0x8(\%rax),\%xmm0,\%xmm0}
-    \item {\ttfamily 11b3:	c5 f3 58 c8          	vaddsd \%xmm0,\%xmm1,\%xmm1}
-    \item {\ttfamily 11b7:	c5 fb 11 09          	vmovsd \%xmm1,(\%rcx) }
-        Соответственно необходимоть использовать ихвручную отпала.
+
+    {
+        \setlength{\parindent}{0em}
+
+        {
+            \setlength{\leftskip}{3em} \ttfamily
+            11a4:	48 83 c0 08          	add    0x8, \%rax \\
+            11a8:	c4 a1 7b 10 04 06    	vmovsd (rsi,r8,1),\%xmm0\\
+            11ae:	c5 fb 58 40 f8       	vaddsd -0x8(\%rax)\,\%xmm0,\%xmm0\\
+            11b3:	c5 f3 58 c8          	vaddsd \%xmm0,\%xmm1,\%xmm1\\
+            11b7:	c5 fb 11 09          	vmovsd \%xmm1,(\%rcx) \\
+    
+        }
+    }
+    Соответственно необходимоть использовать ихвручную отпала.
+
 
 \end{document}
