@@ -6,14 +6,14 @@
 #include <sys/mman.h>
 
 #define SIZE 1024
-#define THREADS 4
+#define THREADS 8
 
 #define BLOCKS SIZE/THREADS
 //#define CHECK
 
 double b[SIZE][SIZE];
 
-inline size_t ind(int x, int y) {
+size_t ind(int x, int y) {
     return y * SIZE + x;
 }
 

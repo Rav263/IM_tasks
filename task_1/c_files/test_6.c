@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define CHECK
+//#define CHECK
 
 #define SIZE 1024
 #define THREADS 4
