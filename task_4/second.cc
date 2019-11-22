@@ -55,19 +55,19 @@ main (int argc, char *argv[])
 
   nCsma = nCsma == 0 ? 1 : nCsma;
 
-  NodeContainer p2pNodes;
-  p2pNodes.Create (2);
+  //NodeContainer p2pNodes;
+  //p2pNodes.Create (2);
 
   NodeContainer csmaNodes;
-  csmaNodes.Add (p2pNodes.Get (1));
+  //csmaNodes.Add (p2pNodes.Get (1));
   csmaNodes.Create (nCsma);
 
-  PointToPointHelper pointToPoint;
-  pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
-  pointToPoint.SetChannelAttribute ("Delay", StringValue ("2ms"));
+ // PointToPointHelper pointToPoint;
+ // pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("5Mbps"));
+ // pointToPoint.SetChannelAttribute ("Delay", StringValue ("2ms"));
 
-  NetDeviceContainer p2pDevices;
-  p2pDevices = pointToPoint.Install (p2pNodes);
+  //NetDeviceContainer p2pDevices;
+  //p2pDevices = pointToPoint.Install (p2pNodes);
 
   CsmaHelper csma;
   csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
@@ -77,13 +77,13 @@ main (int argc, char *argv[])
   csmaDevices = csma.Install (csmaNodes);
 
   InternetStackHelper stack;
-  stack.Install (p2pNodes.Get (0));
+  //stack.Install (p2pNodes.Get (0));
   stack.Install (csmaNodes);
 
   Ipv4AddressHelper address;
-  address.SetBase ("10.1.1.0", "255.255.255.0");
-  Ipv4InterfaceContainer p2pInterfaces;
-  p2pInterfaces = address.Assign (p2pDevices);
+  //address.SetBase ("10.1.1.0", "255.255.255.0");
+  //Ipv4InterfaceContainer p2pInterfaces;
+ // p2pInterfaces = address.Assign (p2pDevices);
 
   address.SetBase ("10.1.2.0", "255.255.255.0");
   Ipv4InterfaceContainer csmaInterfaces;
@@ -96,18 +96,18 @@ main (int argc, char *argv[])
   serverApps.Stop (Seconds (10.0));
 
   UdpEchoClientHelper echoClient (csmaInterfaces.GetAddress (nCsma), 9);
-  echoClient.SetAttribute ("MaxPackets", UintegerValue (1));
+  echoClient.SetAttribute ("MaxPackets", UintegerValue (10));
   echoClient.SetAttribute ("Interval", TimeValue (Seconds (1.0)));
   echoClient.SetAttribute ("PacketSize", UintegerValue (1024));
 
-  ApplicationContainer clientApps = echoClient.Install (p2pNodes.Get (0));
+  ApplicationContainer clientApps = echoClient.Install (csmaNodes.Get (0));
   clientApps.Start (Seconds (2.0));
   clientApps.Stop (Seconds (10.0));
 
   Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
-  pointToPoint.EnablePcapAll ("second");
-  csma.EnablePcap ("second", csmaDevices.Get (1), true);
+//  pointToPoint.EnablePcapAll ("second");
+  csma.EnablePcap ("second", csmaDevices.Get (2), true);
 
   Simulator::Run ();
   Simulator::Destroy ();
