@@ -20,9 +20,12 @@ using distr = std::exponential_distribution<double>;
 double ln2 = 0.69314718056;
 uint64_t total_sended = 0;
 uint64_t total_droped = 0;
+uint64_t total_ended_way = 0;
 double queue_size_midle = 0;
 
-//#define LOG
+#define LOG
+#define DROP_LOG
+#define RX_BEGIN_LOG
 
 class MyApp : public Application {
 public:
@@ -117,7 +120,7 @@ void MyApp::SendPacket (void) {
 
 void MyApp::ScheduleTx (void) {
     if (m_running) {
-        Time tNext(MicroSeconds((*m_distribution)(*m_generator)*10000));
+        Time tNext(MilliSeconds((*m_distribution)(*m_generator)));
         queue_size_midle = ((queue_size_midle * total_sended) +  m_queue->GetNPackets()) / (total_sended + 1);
 #ifdef LOG
         NS_LOG_INFO (m_name << ": Time: " << tNext << " QUEUE SIZE: " << m_queue->GetNPackets());
@@ -126,10 +129,16 @@ void MyApp::ScheduleTx (void) {
     }
 }
 
+static void RxBegin (std::string context, Ptr<const Packet> p) {
+++total_ended_way;
+#ifdef RX_BEGIN_LOG
+    NS_LOG_UNCOND (context << " RxBegin at " << Simulator::Now ().GetSeconds ());
+#endif
+}
 
 static void QueDrop (std::string context, Ptr<const Packet> p) {
     ++total_droped;
-#ifdef LOG
+#ifdef DORP_LOG
     NS_LOG_UNCOND (context << "Queue Drop at " << Simulator::Now ().GetSeconds ());
 #endif
 }
@@ -152,7 +161,7 @@ int main (int argc, char *argv[]) {
     
     CsmaHelper csma;
     csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
-    csma.SetChannelAttribute ("Delay", TimeValue (MicroSeconds(10)));
+    csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds(1982)));
     csma.SetQueue ("ns3::DropTailQueue");
 
     NetDeviceContainer devices = csma.Install (nodes);
@@ -160,9 +169,9 @@ int main (int argc, char *argv[]) {
     std::vector<Ptr<Queue<Packet>>> queues;
     for (uint32_t i = 0; i < csma_num; i++) {
         Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
-        em->SetAttribute ("ErrorRate", DoubleValue (0.0000000001));
+        em->SetAttribute ("ErrorRate", DoubleValue (0.00000001));
         Ptr<DropTailQueue<Packet>> que = CreateObject<DropTailQueue<Packet>>();
-        que->SetMaxSize(QueueSize("50p"));
+        que->SetMaxSize(QueueSize("100p"));
         que->TraceConnect("Drop", "Host " + std::to_string(i) + ": ", MakeCallback(&QueDrop));
         queues.push_back(que);
         devices.Get(i)->SetAttribute("TxQueue", PointerValue(que));
@@ -172,7 +181,7 @@ int main (int argc, char *argv[]) {
     stack.Install (nodes);
 
     Ipv4AddressHelper address;
-    address.SetBase("10.1.1.0", "255.255.255.0");
+    address.SetBase("10.1.0.0", "255.255.0.0");
     Ipv4InterfaceContainer interfaces = address.Assign (devices);
 
     uint16_t sinkPort = 8080;
@@ -180,31 +189,32 @@ int main (int argc, char *argv[]) {
     PacketSinkHelper packetSinkHelper ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), sinkPort));
     ApplicationContainer sinkApps = packetSinkHelper.Install (nodes.Get (csma_num - 1));
     sinkApps.Start (Seconds (0.));
-    sinkApps.Stop (Seconds (5.));
+    sinkApps.Stop (Seconds (10.));
 
 
     for (uint32_t i = 0; i < csma_num - 1; i++) {
         Ptr<Socket> ns3UdpSocket = Socket::CreateSocket (nodes.Get (i), UdpSocketFactory::GetTypeId ());
         Ptr<MyApp> app = CreateObject<MyApp> ();
-        app->Setup (ns3UdpSocket, sinkAddress, 1040, new gener(i), new distr(ln2*50), queues[i], "Host " + std::to_string(i));
+        app->Setup (ns3UdpSocket, sinkAddress, 1500, new gener(i), new distr(0.1), queues[i], "Host " + std::to_string(i));
         nodes.Get (i)->AddApplication (app);
-        app->SetStartTime (Seconds (1.));
-        app->SetStopTime (Seconds (5.));
+        app->SetStartTime (Seconds (0.));
+        app->SetStopTime (Seconds (10.));
         devices.Get (i)->TraceConnect("MacTxDrop","Host " + std::to_string(i) + ": ", MakeCallback (&MacTxDrop));
     }
 
+    devices.Get (csma_num - 1)->TraceConnect("PhyRxBegin", "Server:" , MakeCallback (&RxBegin));
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll (ascii.CreateFileStream ("fifth.tr"));
 
 
-    Simulator::Stop (Seconds (5));
+    Simulator::Stop (Seconds (10));
     Simulator::Run ();
     Simulator::Destroy ();
 
     std::cout << "Total sended: " << total_sended << std::endl 
               << "Total droped: " << total_droped << std::endl
-              << "Queue size midle: " << queue_size_midle << std::endl;
-
+              << "Queue size midle: " << queue_size_midle << std::endl
+              << "Getted from Server: " << total_ended_way << std::endl;
     return 0;
 }
 
