@@ -21,11 +21,13 @@ double ln2 = 0.69314718056;
 uint64_t total_sended = 0;
 uint64_t total_droped = 0;
 uint64_t total_ended_way = 0;
+uint64_t back_off_total = 0;
 double queue_size_midle = 0;
 
-#define LOG
-#define DROP_LOG
-#define RX_BEGIN_LOG
+//#define LOG
+//#define DROP_LOG
+//#define RX_BEGIN_LOG
+#define BACKOFF_LOG
 
 class MyApp : public Application {
 public:
@@ -41,11 +43,13 @@ private:
 
     void ScheduleTx (void);
     void SendPacket (void);
+    void PrintLog (void);
 
     Ptr<Socket>     m_socket;
     Address         m_peer;
     uint32_t        m_packetSize;
     EventId         m_sendEvent;
+    EventId         m_timeEvent;
     bool            m_running;
     uint32_t        m_packetsSent;
     gener          *m_generator;
@@ -91,7 +95,14 @@ void MyApp::StartApplication (void) {
     m_socket->SetAllowBroadcast(true);
 
     m_sendEvent = Simulator::Schedule(Seconds(0.0), &MyApp::SendPacket, this);
+    m_timeEvent = Simulator::Schedule(Seconds(0.0), &MyApp::PrintLog, this);
 }
+
+void MyApp::PrintLog(void) {
+    NS_LOG_INFO(m_name << ": Current time" << (Simulator::Now()).GetSeconds());
+    m_timeEvent = Simulator::Schedule(Seconds(0.5), &MyApp::PrintLog, this);
+}
+
 
 void MyApp::StopApplication (void) {
     m_running = false;
@@ -148,7 +159,16 @@ static void MacTxDrop (std::string context, Ptr<const Packet> p) {
     NS_LOG_UNCOND (context << "MacTxDrop at " << Simulator::Now ().GetSeconds ());
 #endif
 }
-uint64_t csma_num = 10;
+
+static void MacTxBackoff (std::string context, Ptr<const Packet> p) {
+++back_off_total;
+#ifdef BACKOFF_LOG
+    NS_LOG_UNCOND (context << "Backoff at " << Simulator::Now ().GetSeconds ());
+#endif
+}
+
+
+uint64_t csma_num = 30;
 
 int main (int argc, char *argv[]) {
     CommandLine cmd;
@@ -167,7 +187,7 @@ int main (int argc, char *argv[]) {
     NetDeviceContainer devices = csma.Install (nodes);
 
     std::vector<Ptr<Queue<Packet>>> queues;
-    for (uint32_t i = 0; i < csma_num; i++) {
+    for (uint32_t i = 0; i < csma_num - 1; i++) {
         Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
         em->SetAttribute ("ErrorRate", DoubleValue (0.00000001));
         Ptr<DropTailQueue<Packet>> que = CreateObject<DropTailQueue<Packet>>();
@@ -200,12 +220,13 @@ int main (int argc, char *argv[]) {
         app->SetStartTime (Seconds (0.));
         app->SetStopTime (Seconds (10.));
         devices.Get (i)->TraceConnect("MacTxDrop","Host " + std::to_string(i) + ": ", MakeCallback (&MacTxDrop));
+        devices.Get (i)->TraceConnect("MacTxBackoff", "Host " + std::to_string(i) + ": ", MakeCallback (&MacTxBackoff));
     }
 
-    devices.Get (csma_num - 1)->TraceConnect("PhyRxBegin", "Server:" , MakeCallback (&RxBegin));
+    devices.Get (csma_num - 1)->TraceConnect("MacRx", "Server:" , MakeCallback (&RxBegin));
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll (ascii.CreateFileStream ("fifth.tr"));
-
+    csma.EnablePcap("test", devices.Get(csma_num - 1), true);
 
     Simulator::Stop (Seconds (10));
     Simulator::Run ();
@@ -214,7 +235,8 @@ int main (int argc, char *argv[]) {
     std::cout << "Total sended: " << total_sended << std::endl 
               << "Total droped: " << total_droped << std::endl
               << "Queue size midle: " << queue_size_midle << std::endl
-              << "Getted from Server: " << total_ended_way << std::endl;
+              << "Getted from Server: " << total_ended_way << std::endl
+              << "Backoff packets: " << back_off_total << std::endl;
     return 0;
 }
 
