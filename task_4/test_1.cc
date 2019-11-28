@@ -27,7 +27,7 @@ double queue_size_midle = 0;
 //#define LOG
 //#define DROP_LOG
 //#define RX_BEGIN_LOG
-#define BACKOFF_LOG
+//#define BACKOFF_LOG
 
 class MyApp : public Application {
 public:
@@ -99,7 +99,8 @@ void MyApp::StartApplication (void) {
 }
 
 void MyApp::PrintLog(void) {
-    NS_LOG_INFO(m_name << ": Current time" << (Simulator::Now()).GetSeconds());
+    if (m_name == "Host 0")
+        NS_LOG_INFO(m_name << ": Current time " << (Simulator::Now()).GetSeconds());
     m_timeEvent = Simulator::Schedule(Seconds(0.5), &MyApp::PrintLog, this);
 }
 
@@ -168,10 +169,16 @@ static void MacTxBackoff (std::string context, Ptr<const Packet> p) {
 }
 
 
-uint64_t csma_num = 30;
+uint64_t csma_num = 10;
+double distr = 0.1;
+uint64_t channel_delay = 300;
+
 
 int main (int argc, char *argv[]) {
     CommandLine cmd;
+    
+    cmd.AddValue("Number of hosts"
+
     cmd.Parse (argc, argv);
 
     LogComponentEnable ("MyApp", LOG_LEVEL_INFO);
@@ -180,8 +187,8 @@ int main (int argc, char *argv[]) {
     nodes.Create (csma_num);
     
     CsmaHelper csma;
-    csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
-    csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds(1982)));
+    csma.SetChannelAttribute ("DataRate", StringValue ("1000Mbps"));
+    csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds(300)));//1982)));
     csma.SetQueue ("ns3::DropTailQueue");
 
     NetDeviceContainer devices = csma.Install (nodes);
@@ -232,11 +239,14 @@ int main (int argc, char *argv[]) {
     Simulator::Run ();
     Simulator::Destroy ();
 
+    double backoff_midle = (double) back_off_total / (total_sended - total_droped);
+
     std::cout << "Total sended: " << total_sended << std::endl 
               << "Total droped: " << total_droped << std::endl
               << "Queue size midle: " << queue_size_midle << std::endl
               << "Getted from Server: " << total_ended_way << std::endl
-              << "Backoff packets: " << back_off_total << std::endl;
+              << "Backoff times: " << back_off_total << std::endl
+              << "Backoff times for one packet: " << backoff_midle << std::endl;
     return 0;
 }
 
