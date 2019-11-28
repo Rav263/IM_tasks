@@ -17,11 +17,20 @@ NS_LOG_COMPONENT_DEFINE ("MyApp");
 using gener = std::default_random_engine;
 using distr = std::exponential_distribution<double>;
 
+double ln2 = 0.69314718056;
+uint64_t total_sended = 0;
+uint64_t total_droped = 0;
+double queue_size_midle = 0;
+
+//#define LOG
+
 class MyApp : public Application {
 public:
     MyApp ();
     virtual ~MyApp();
-    void Setup (Ptr<Socket> socket, Address address, uint32_t packetSize, uint32_t nPackets, DataRate dataRate, gener *generator, distr *distribution, Ptr<Queue<Packet>> queue);
+    void Setup (Ptr<Socket> socket, Address address, uint32_t packetSize, 
+                gener *generator, distr *distribution, Ptr<Queue<Packet>> queue,
+                std::string host_name);
 
 private:
     virtual void StartApplication (void);
@@ -33,22 +42,19 @@ private:
     Ptr<Socket>     m_socket;
     Address         m_peer;
     uint32_t        m_packetSize;
-    uint32_t        m_nPackets;
-    DataRate        m_dataRate;
     EventId         m_sendEvent;
     bool            m_running;
     uint32_t        m_packetsSent;
     gener          *m_generator;
     distr          *m_distribution;
     Ptr<Queue<Packet>>      m_queue;
+    std::string     m_name;
 };
 
 MyApp::MyApp():
     m_socket (0), 
     m_peer (), 
     m_packetSize (0), 
-    m_nPackets (0), 
-    m_dataRate (0), 
     m_sendEvent (), 
     m_running (false), 
     m_packetsSent (0)
@@ -60,15 +66,16 @@ MyApp::~MyApp() {
     delete m_distribution;
 }
 
-void MyApp::Setup (Ptr<Socket> socket, Address address, uint32_t packetSize, uint32_t nPackets, DataRate dataRate, gener *generator, distr *distribution, Ptr<Queue<Packet>> queue) {
+void MyApp::Setup (Ptr<Socket> socket, Address address, uint32_t packetSize, 
+                   gener *generator, distr *distribution, Ptr<Queue<Packet>> queue,
+                   std::string host_name) {
     m_socket       = socket;
     m_peer         = address;
     m_packetSize   = packetSize;
-    m_nPackets     = nPackets;
-    m_dataRate     = dataRate;
     m_generator    = generator;
     m_distribution = distribution;
     m_queue        = queue;
+    m_name         = host_name;
 }
 
 void MyApp::StartApplication (void) {
@@ -99,42 +106,44 @@ void MyApp::SendPacket (void) {
     Ptr<Packet> packet = Create<Packet> (m_packetSize);
     m_socket->Send (packet);
 
-    ++m_packetsSent;
-    NS_LOG_INFO ("TraceDelay TX " << m_packetSize << " bytes to " << " Uid: "
-                                  << packet->GetUid () << " Time: "
-                                  << (Simulator::Now ()).GetSeconds ());
-
+    ++total_sended;
+#ifdef LOG
+    NS_LOG_INFO (m_name << ": TraceDelay TX " << m_packetSize << " bytes to " << " Uid: "
+                                              << packet->GetUid () << " Time: "
+                                              << (Simulator::Now ()).GetSeconds ());
+#endif
     ScheduleTx ();
 }
 
 void MyApp::ScheduleTx (void) {
     if (m_running) {
-        //Time tNext (Seconds (m_packetSize * 8 / static_cast<double> (m_dataRate.GetBitRate ())));
-        Time tNext(MilliSeconds((*m_distribution)(*m_generator) * 100));
-        NS_LOG_INFO (" Time: " << tNext << " QUEUE SIZE: " << m_queue->GetNPackets());
-
+        Time tNext(MicroSeconds((*m_distribution)(*m_generator)*10000));
+        queue_size_midle = ((queue_size_midle * total_sended) +  m_queue->GetNPackets()) / (total_sended + 1);
+#ifdef LOG
+        NS_LOG_INFO (m_name << ": Time: " << tNext << " QUEUE SIZE: " << m_queue->GetNPackets());
+#endif
         m_sendEvent = Simulator::Schedule (tNext, &MyApp::SendPacket, this);
     }
 }
 
 
-static void RxDrop (std::string context, Ptr<const Packet> p) {
-    NS_LOG_UNCOND (context << " RxDrop at " << Simulator::Now ().GetSeconds ());
-}
-
 static void QueDrop (std::string context, Ptr<const Packet> p) {
-    NS_LOG_UNCOND (context << " Queue Drop at " << Simulator::Now ().GetSeconds ());
+    ++total_droped;
+#ifdef LOG
+    NS_LOG_UNCOND (context << "Queue Drop at " << Simulator::Now ().GetSeconds ());
+#endif
 }
 
 static void MacTxDrop (std::string context, Ptr<const Packet> p) {
+#ifdef LOG
     NS_LOG_UNCOND (context << "MacTxDrop at " << Simulator::Now ().GetSeconds ());
+#endif
 }
-uint64_t csma_num = 20;
+uint64_t csma_num = 10;
 
 int main (int argc, char *argv[]) {
     CommandLine cmd;
     cmd.Parse (argc, argv);
-
 
     LogComponentEnable ("MyApp", LOG_LEVEL_INFO);
 
@@ -142,15 +151,16 @@ int main (int argc, char *argv[]) {
     nodes.Create (csma_num);
     
     CsmaHelper csma;
-    csma.SetChannelAttribute ("DataRate", StringValue ("1Mbps"));
-    csma.SetChannelAttribute ("Delay", TimeValue (MilliSeconds(1)));
+    csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
+    csma.SetChannelAttribute ("Delay", TimeValue (MicroSeconds(10)));
+    csma.SetQueue ("ns3::DropTailQueue");
 
     NetDeviceContainer devices = csma.Install (nodes);
 
     std::vector<Ptr<Queue<Packet>>> queues;
     for (uint32_t i = 0; i < csma_num; i++) {
         Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
-        em->SetAttribute ("ErrorRate", DoubleValue (0.00001));
+        em->SetAttribute ("ErrorRate", DoubleValue (0.0000000001));
         Ptr<DropTailQueue<Packet>> que = CreateObject<DropTailQueue<Packet>>();
         que->SetMaxSize(QueueSize("50p"));
         que->TraceConnect("Drop", "Host " + std::to_string(i) + ": ", MakeCallback(&QueDrop));
@@ -170,34 +180,31 @@ int main (int argc, char *argv[]) {
     PacketSinkHelper packetSinkHelper ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address::GetAny (), sinkPort));
     ApplicationContainer sinkApps = packetSinkHelper.Install (nodes.Get (csma_num - 1));
     sinkApps.Start (Seconds (0.));
-    sinkApps.Stop (Seconds (20.));
+    sinkApps.Stop (Seconds (5.));
 
 
     for (uint32_t i = 0; i < csma_num - 1; i++) {
         Ptr<Socket> ns3UdpSocket = Socket::CreateSocket (nodes.Get (i), UdpSocketFactory::GetTypeId ());
-        //`ns3TcpSocket->TraceConnectWithoutContext ("CongestionWindow", MakeCallback (&CwndChange));
         Ptr<MyApp> app = CreateObject<MyApp> ();
-        app->Setup (ns3UdpSocket, sinkAddress, 1040, 10000, DataRate ("100Mbps"), new gener(i), new distr(1.4), queues[i]);
+        app->Setup (ns3UdpSocket, sinkAddress, 1040, new gener(i), new distr(ln2*50), queues[i], "Host " + std::to_string(i));
         nodes.Get (i)->AddApplication (app);
         app->SetStartTime (Seconds (1.));
-        app->SetStopTime (Seconds (20.));
-//        devices.Get (i)->TraceConnect("PhyTxBegin","Host " + std::to_string(i) + ": ", MakeCallback (&TxBegin));
+        app->SetStopTime (Seconds (5.));
         devices.Get (i)->TraceConnect("MacTxDrop","Host " + std::to_string(i) + ": ", MakeCallback (&MacTxDrop));
     }
-
-    devices.Get (csma_num - 1)->TraceConnect("PhyRxDrop", "Server:" , MakeCallback (&RxDrop));
-
-    //std::ofstream file("fifth.tr", std::ios_base::binary | std::ios_base::out);
 
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll (ascii.CreateFileStream ("fifth.tr"));
 
 
-    Simulator::Stop (Seconds (20));
+    Simulator::Stop (Seconds (5));
     Simulator::Run ();
     Simulator::Destroy ();
 
-    //file.close();
+    std::cout << "Total sended: " << total_sended << std::endl 
+              << "Total droped: " << total_droped << std::endl
+              << "Queue size midle: " << queue_size_midle << std::endl;
+
     return 0;
 }
 
