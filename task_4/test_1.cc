@@ -170,25 +170,27 @@ static void MacTxBackoff (std::string context, Ptr<const Packet> p) {
 
 
 uint64_t csma_num = 10;
-double distr = 0.1;
+double dist = 0.1;
 uint64_t channel_delay = 300;
 
 
 int main (int argc, char *argv[]) {
     CommandLine cmd;
     
-    cmd.AddValue("Number of hosts"
-
+    cmd.AddValue("hosts", "Number of hosts in simulation", csma_num);
+    cmd.AddValue("distr", "Distribution parametr", dist);
+    cmd.AddValue("delay", "Delay in channel", channel_delay);
     cmd.Parse (argc, argv);
 
     LogComponentEnable ("MyApp", LOG_LEVEL_INFO);
+    csma_num += 1;
 
     NodeContainer nodes;
     nodes.Create (csma_num);
     
     CsmaHelper csma;
     csma.SetChannelAttribute ("DataRate", StringValue ("1000Mbps"));
-    csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds(300)));//1982)));
+    csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds(channel_delay)));//1982)));
     csma.SetQueue ("ns3::DropTailQueue");
 
     NetDeviceContainer devices = csma.Install (nodes);
@@ -222,7 +224,7 @@ int main (int argc, char *argv[]) {
     for (uint32_t i = 0; i < csma_num - 1; i++) {
         Ptr<Socket> ns3UdpSocket = Socket::CreateSocket (nodes.Get (i), UdpSocketFactory::GetTypeId ());
         Ptr<MyApp> app = CreateObject<MyApp> ();
-        app->Setup (ns3UdpSocket, sinkAddress, 1500, new gener(i), new distr(0.1), queues[i], "Host " + std::to_string(i));
+        app->Setup (ns3UdpSocket, sinkAddress, 1500, new gener(i), new distr(dist), queues[i], "Host " + std::to_string(i));
         nodes.Get (i)->AddApplication (app);
         app->SetStartTime (Seconds (0.));
         app->SetStopTime (Seconds (10.));

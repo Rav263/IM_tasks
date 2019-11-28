@@ -9,6 +9,6 @@ cp "$CWD/$1.cc" ./
 cd ..
 
 
-./waf --run $1 $2 $3 $4 $5 $6
+./waf --run="$1 $2" $3 $4 $5 $6
 rm ./scratch/$1.cc
 cd "$CWD"
