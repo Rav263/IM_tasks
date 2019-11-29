@@ -23,6 +23,7 @@ uint64_t total_droped = 0;
 uint64_t total_ended_way = 0;
 uint64_t back_off_total = 0;
 double queue_size_midle = 0;
+uint64_t queue_max_size = 0;
 
 //#define LOG
 //#define DROP_LOG
@@ -132,8 +133,10 @@ void MyApp::SendPacket (void) {
 
 void MyApp::ScheduleTx (void) {
     if (m_running) {
-        Time tNext(MilliSeconds((*m_distribution)(*m_generator)));
-        queue_size_midle = ((queue_size_midle * total_sended) +  m_queue->GetNPackets()) / (total_sended + 1);
+        Time tNext(MilliSeconds((*m_distribution)(*m_generator)*1000));
+        queue_size_midle += m_queue->GetNPackets();
+
+        queue_max_size = queue_max_size > m_queue->GetNPackets() ? queue_max_size : m_queue->GetNPackets();
 #ifdef LOG
         NS_LOG_INFO (m_name << ": Time: " << tNext << " QUEUE SIZE: " << m_queue->GetNPackets());
 #endif
@@ -170,7 +173,7 @@ static void MacTxBackoff (std::string context, Ptr<const Packet> p) {
 
 
 uint64_t csma_num = 10;
-double dist = 0.1;
+double dist = 10;
 uint64_t channel_delay = 300;
 
 
@@ -189,7 +192,7 @@ int main (int argc, char *argv[]) {
     nodes.Create (csma_num);
     
     CsmaHelper csma;
-    csma.SetChannelAttribute ("DataRate", StringValue ("1000Mbps"));
+    csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
     csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds(channel_delay)));//1982)));
     csma.SetQueue ("ns3::DropTailQueue");
 
@@ -242,13 +245,15 @@ int main (int argc, char *argv[]) {
     Simulator::Destroy ();
 
     double backoff_midle = (double) back_off_total / (total_sended - total_droped);
+    queue_size_midle /= total_sended;
 
     std::cout << "Total sended: " << total_sended << std::endl 
               << "Total droped: " << total_droped << std::endl
               << "Queue size midle: " << queue_size_midle << std::endl
               << "Getted from Server: " << total_ended_way << std::endl
               << "Backoff times: " << back_off_total << std::endl
-              << "Backoff times for one packet: " << backoff_midle << std::endl;
+              << "Backoff times for one packet: " << backoff_midle << std::endl
+              << "Max queue sizes: " << queue_max_size << std::endl;
     return 0;
 }
 
